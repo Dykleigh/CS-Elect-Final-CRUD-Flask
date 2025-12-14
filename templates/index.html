@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS-Elect Final Project - Test UI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-top: 20px; }
+        .hidden { display: none; }
+        #api-response { white-space: pre-wrap; background: #f8f9fa; padding: 10px; border: 1px solid #ddd; max-height: 300px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">API Test Dashboard</h1>
+        
+        <!-- Auth Section -->
+        <div id="auth-section" class="card mb-4">
+            <div class="card-header">Authentication</div>
+            <div class="card-body">
+                <div id="login-form">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-auto">
+                            <input type="text" id="username" class="form-control" placeholder="Username (admin)" value="admin">
+                        </div>
+                        <div class="col-auto">
+                            <input type="password" id="password" class="form-control" placeholder="Password (adminpassword)" value="adminpassword">
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-primary" onclick="login()">Login</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="logged-in-view" class="hidden">
+                    <span class="text-success fw-bold">Logged in!</span>
+                    <button class="btn btn-sm btn-outline-danger ms-2" onclick="logout()">Logout</button>
+                    <div class="mt-2 text-muted small">Token stored in localStorage.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content (Hidden until login) -->
+        <div id="main-content" class="hidden">
+            
+            <!-- Search Section -->
+            <div class="card mb-4">
+                <div class="card-header">Search Sales</div>
+                <div class="card-body">
+                    <form id="search-form" onsubmit="event.preventDefault(); searchSales();">
+                        <div class="row g-2">
+                            <div class="col-md-3"><input type="text" class="form-control" id="s-product" placeholder="Product Name"></div>
+                            <div class="col-md-3"><input type="text" class="form-control" id="s-category" placeholder="Category"></div>
+                            <div class="col-md-3"><input type="text" class="form-control" id="s-region" placeholder="Region"></div>
+                            <div class="col-md-3"><input type="date" class="form-control" id="s-date-from"></div>
+                            <div class="col-md-12 text-end">
+                                <button type="submit" class="btn btn-success">Search</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- CRUD Tabs -->
+            <ul class="nav nav-tabs" id="crudTabs" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-sales">Sales</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-products">Products</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-customers">Customers</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-categories">Categories</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-regions">Regions</button></li>
+            </ul>
+
+            <div class="tab-content p-3 border border-top-0 mb-4">
+                <!-- Generic CRUD Controls -->
+                <div class="mb-3">
+                    <button class="btn btn-primary btn-sm" onclick="loadCurrentTab()">Refresh List</button>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="toggleCreateForm()">Toggle Create Form</button>
+                </div>
+
+                <!-- Create Form Container -->
+                <div id="create-form-container" class="card card-body bg-light mb-3 hidden">
+                    <h5>Create New Item</h5>
+                    <form id="dynamic-create-form" onsubmit="event.preventDefault(); createItem();">
+                        <!-- Fields injected by JS -->
+                    </form>
+                </div>
+
+                <!-- Data Table -->
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="data-table">
+                        <thead><tr id="table-header"></tr></thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Response Log -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Last API Response</span>
+                <select id="format-selector" class="form-select form-select-sm w-auto">
+                    <option value="json">JSON</option>
+                    <option value="xml">XML</option>
+                </select>
+            </div>
+            <div id="api-response" class="card-body font-monospace small">No requests yet.</div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = '/api';
+        let currentTab = 'sales';
+        
+        // Schemas for Create Forms
+        const SCHEMAS = {
+            sales: [
+                {name: 'sale_id', type: 'number', placeholder: 'ID'},
+                {name: 'product_id', type: 'number', placeholder: 'Product ID'},
+                {name: 'customer_id', type: 'number', placeholder: 'Customer ID'},
+                {name: 'region_id', type: 'number', placeholder: 'Region ID'},
+                {name: 'sale_date', type: 'date', placeholder: 'Date'},
+                {name: 'quantity', type: 'number', placeholder: 'Qty'},
+                {name: 'price', type: 'number', step: '0.01', placeholder: 'Price'}
+            ],
+            products: [
+                {name: 'product_name', type: 'text', placeholder: 'Name'},
+                {name: 'category_id', type: 'number', placeholder: 'Category ID'}
+            ],
+            customers: [
+                {name: 'customer_id', type: 'number', placeholder: 'ID'},
+                {name: 'first_name', type: 'text', placeholder: 'First Name'},
+                {name: 'last_name', type: 'text', placeholder: 'Last Name'},
+                {name: 'email', type: 'email', placeholder: 'Email'},
+                {name: 'signup_date', type: 'date', placeholder: 'Signup Date'}
+            ],
+            categories: [
+                {name: 'category_name', type: 'text', placeholder: 'Name'}
+            ],
+            regions: [
+                {name: 'region_name', type: 'text', placeholder: 'Name'}
+            ]
+        };
+
+        // Auth
+        function getToken() { return localStorage.getItem('jwt_token'); }
+        
+        async function login() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({username: u, password: p})
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    localStorage.setItem('jwt_token', data.access_token);
+                    checkAuth();
+                } else {
+                    alert('Login failed: ' + (data.error || 'Unknown error'));
+                }
+                logResponse(res, data);
+            } catch (e) { alert('Network error'); console.error(e); }
+        }
+
+        function logout() {
+            localStorage.removeItem('jwt_token');
+            checkAuth();
+        }
+
+        function checkAuth() {
+            const token = getToken();
+            if (token) {
+                document.getElementById('login-form').classList.add('hidden');
+                document.getElementById('logged-in-view').classList.remove('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                loadCurrentTab();
+            } else {
+                document.getElementById('login-form').classList.remove('hidden');
+                document.getElementById('logged-in-view').classList.add('hidden');
+                document.getElementById('main-content').classList.add('hidden');
+            }
+        }
+
+        // Tab Handling
+        document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(el => {
+            el.addEventListener('shown.bs.tab', event => {
+                currentTab = event.target.getAttribute('data-bs-target').replace('#tab-', '');
+                buildCreateForm();
+                loadCurrentTab();
+            });
+        });
+
+        function buildCreateForm() {
+            const container = document.getElementById('dynamic-create-form');
+            container.innerHTML = '';
+            const fields = SCHEMAS[currentTab] || [];
+            
+            let html = '<div class="row g-2">';
+            fields.forEach(f => {
+                const step = f.step ? `step="${f.step}"` : '';
+                html += `
+                    <div class="col-md-3">
+                        <input type="${f.type}" name="${f.name}" class="form-control form-control-sm" placeholder="${f.placeholder}" required ${step}>
+                    </div>`;
+            });
+            html += '<div class="col-md-12 mt-2"><button type="submit" class="btn btn-success btn-sm">Create</button></div></div>';
+            container.innerHTML = html;
+        }
+
+        function toggleCreateForm() {
+            document.getElementById('create-form-container').classList.toggle('hidden');
+        }
+
+        // API Calls
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const token = getToken();
+            if (!token) return alert('Please login first');
+
+            const fmt = document.getElementById('format-selector').value;
+            const url = `${API_BASE}/${endpoint}` + (endpoint.includes('?') ? '&' : '?') + `format=${fmt}`;
+            
+            const options = {
+                method,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            };
+            if (body) options.body = JSON.stringify(body);
+
+            try {
+                const res = await fetch(url, options);
+                const text = await res.text();
+                
+                // Try parsing JSON for logic, but display raw text (XML/JSON)
+                let data;
+                try { data = JSON.parse(text); } catch(e) { data = text; }
+                
+                logResponse(res, text); // Log raw text to show XML if requested
+                return { ok: res.ok, data: data, raw: text };
+            } catch (e) {
+                console.error(e);
+                document.getElementById('api-response').textContent = 'Error: ' + e.message;
+            }
+        }
+
+        async function loadCurrentTab() {
+            const res = await apiCall(currentTab);
+            if (res && res.ok && typeof res.data === 'object') {
+                renderTable(res.data.items || []);
+            }
+        }
+
+        async function searchSales() {
+            currentTab = 'sales'; // Force switch context logically
+            const p = document.getElementById('s-product').value;
+            const c = document.getElementById('s-category').value;
+            const r = document.getElementById('s-region').value;
+            const d = document.getElementById('s-date-from').value;
+            
+            const query = new URLSearchParams();
+            if(p) query.append('product_name', p);
+            if(c) query.append('category_name', c);
+            if(r) query.append('region_name', r);
+            if(d) query.append('date_from', d);
+
+            const res = await apiCall(`sales/search?${query.toString()}`);
+            if (res && res.ok && typeof res.data === 'object') {
+                renderTable(res.data.items || []);
+            }
+        }
+
+        async function createItem() {
+            const form = document.getElementById('dynamic-create-form');
+            const formData = new FormData(form);
+            const body = {};
+            formData.forEach((v, k) => body[k] = v);
+
+            const res = await apiCall(currentTab, 'POST', body);
+            if (res && res.ok) {
+                alert('Created!');
+                form.reset();
+                loadCurrentTab();
+            }
+        }
+
+        async function deleteItem(id) {
+            if(!confirm('Delete this item?')) return;
+            const res = await apiCall(`${currentTab}/${id}`, 'DELETE');
+            if (res && res.ok) loadCurrentTab();
+        }
+
+        // Rendering
+        function renderTable(items) {
+            const thead = document.getElementById('table-header');
+            const tbody = document.getElementById('table-body');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (items.length === 0) {
+                tbody.innerHTML = '<tr><td class="text-center text-muted">No records found</td></tr>';
+                return;
+            }
+
+            // Headers
+            const keys = Object.keys(items[0]);
+            let hHtml = '';
+            keys.forEach(k => hHtml += `<th>${k}</th>`);
+            hHtml += '<th>Actions</th>';
+            thead.innerHTML = hHtml;
+
+            // Rows
+            items.forEach(item => {
+                let rHtml = '<tr>';
+                keys.forEach(k => rHtml += `<td>${item[k]}</td>`);
+                
+                // Identify ID key for deletion
+                const idKey = keys.find(k => k.endsWith('_id'));
+                const id = item[idKey];
+                
+                rHtml += `<td>
+                    <button class="btn btn-danger btn-sm py-0" onclick="deleteItem(${id})">&times;</button>
+                </td></tr>`;
+                tbody.innerHTML += rHtml;
+            });
+        }
+
+        function logResponse(res, data) {
+            const box = document.getElementById('api-response');
+            const status = `${res.status} ${res.statusText}`;
+            const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+            box.textContent = `Status: ${status}\n\n${content}`;
+        }
+
+        // Init
+        checkAuth();
+        buildCreateForm();
+    </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import jwt
 import dicttoxml
-from flask import Flask, Response, jsonify, make_response, request
+from flask import Flask, Response, jsonify, make_response, request, render_template
 from flask_mysqldb import MySQL
 from werkzeug.exceptions import BadRequest, NotFound
 
@@ -180,6 +180,10 @@ def create_app() -> Flask:
 	app.config.setdefault("MYSQL_CURSORCLASS", "DictCursor")
 
 	mysql.init_app(app)
+
+	@app.route("/")
+	def index():
+		return render_template("index.html")
 
 	@app.get("/health")
 	def health() -> Response:
